@@ -73,3 +73,5 @@ secrets.json
 *.key
 upload-keystore.jks
 android/key.properties
+key.properties
+local.properties
