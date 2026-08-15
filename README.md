@@ -74,6 +74,7 @@ flowchart LR
     classDef cloud fill:#f3e5f5,stroke:#7b1fa2
     class U,AUTH,HOME,ORD,UP,FAV,PREM,SALES,NOT,MP,PF local
     class SB,ST,RT,FUNC,MY cloud
+```
 Características técnicas destacadas
 Área	Implementación
 Geolocalización	Consultas geoespaciales con geolocator + geocoding para filtrar productos por radio de entrega.
