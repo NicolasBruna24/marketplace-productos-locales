@@ -455,15 +455,20 @@ class SupabaseService {
     return await _supabase.from('pedidos').insert(pedidoData).select().single();
   }
 
-  // Obtener pedidos recibidos para el proveedor actual
+  // Obtener los pedidos del usuario actual: como VENDEDOR (pedidos recibidos) y
+  // como COMPRADOR (compras propias). El filtrado de filas lo realiza RLS:
+  //   - "Proveedores ven sus propios pedidos"  (auth.uid() = proveedor_id)
+  //   - "Comprador ve sus pedidos"             (auth.uid() = comprador_id)
+  // Se incluye el join a `reseñas` (0 o 1 fila por pedido, por UNIQUE(pedido_id))
+  // para poder ocultar el botón de "Calificar producto" cuando el comprador ya
+  // calificó ese pedido.
   Future<List<Map<String, dynamic>>> obtenerMisPedidos() async {
     final user = usuarioActual;
     if (user == null) return [];
 
     final response = await _supabase
         .from('pedidos')
-        .select('*, productos(nombre, imagen_url, detalles)')
-        .eq('proveedor_id', user.id)
+        .select('*, productos(nombre, imagen_url, detalles), reseñas(id)')
         .order('created_at', ascending: false);
     return List<Map<String, dynamic>>.from(response);
   }
