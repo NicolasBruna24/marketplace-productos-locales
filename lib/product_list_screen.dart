@@ -1182,17 +1182,14 @@ class _ProductListScreenState extends State<ProductListScreen> {
                 } else {
                   Navigator.push(context, slideRoute(const LoginScreen()));
                 }
-              } else if (index == 2) {
-                // Ventas/Pedidos
+} else if (index == 2) {
+                // Mis Pedidos: tanto compradores como vendedores ven aquí sus
+                // pedidos. La pantalla muestra el botón "Calificar producto" solo
+                // al comprador de cada orden (comprador_id == auth.uid()). La
+                // configuración del perfil de vendedor sigue disponible en la
+                // pestaña "Perfil".
                 if (estaLogueado) {
-                  if (_esVerificado) {
-                    Navigator.push(context, slideRoute(const OrdersScreen()));
-                  } else {
-                    Navigator.push(
-                      context,
-                      slideRoute(const EditProfileScreen()),
-                    );
-                  }
+                  Navigator.push(context, slideRoute(const OrdersScreen()));
                 } else {
                   Navigator.push(context, slideRoute(const LoginScreen()));
                 }
@@ -1809,3 +1806,4 @@ class _DrawerSection extends StatelessWidget {
     );
   }
 }
+
