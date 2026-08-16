@@ -584,6 +584,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
               await _service.crearPedido({
                 'producto_id': productData['id'],
                 'proveedor_id': productData['proveedor_id'],
+                'comprador_id': _service.usuarioActual?.id,
+                'comprador_nombre': _service.usuarioActual?.email ?? 'Cliente',
                 'monto': price * _cantidad,
                 'metodo_pago': 'transferencia',
                 'estado': 'pendiente_pago',
