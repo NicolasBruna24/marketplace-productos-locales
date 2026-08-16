@@ -63,12 +63,15 @@ serve(async (req) => {
 
     // ── 4) Verificar identidad del llamante (la función tiene verify_jwt) ─
     const authHeader = req.headers.get('Authorization')
-    if (authHeader) {
-      const token = authHeader.replace('Bearer ', '')
-      const { data: { user }, error: authError } = await supabase.auth.getUser(token)
-      if (authError || !user) {
-        return json({ error: 'Token inválido o expirado' }, 401)
-      }
+    // Fail-closed: sin token válido no se crea el pedido. `user` queda en scope
+    // para poder registrar comprador_id del comprador que paga.
+    if (!authHeader) {
+      return json({ error: 'No autorizado: falta token de autenticación' }, 401)
+    }
+    const token = authHeader.replace('Bearer ', '')
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token)
+    if (authError || !user) {
+      return json({ error: 'Token inválido o expirado' }, 401)
     }
 
     // ── 5) Consultar el precio real del producto en la DB ─────────────────
@@ -97,6 +100,8 @@ serve(async (req) => {
       .insert({
         producto_id: product_id,
         proveedor_id: producto.proveedor_id,
+        comprador_id: user.id,
+        comprador_nombre: user.email ?? 'Cliente',
         monto: precioTotal,
         cantidad: cantidad as number,
         metodo_pago: 'mercado_pago',
