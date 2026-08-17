@@ -80,6 +80,8 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
                                         ? CachedNetworkImage(
                                             imageUrl: product['imagen_url'],
                                             fit: BoxFit.cover,
+                                            memCacheWidth: 400,
+                                            memCacheHeight: 400,
                                           )
                                         : Container(color: Colors.grey[200], child: const Icon(Icons.image)),
                                   ),

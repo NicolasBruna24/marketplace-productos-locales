@@ -1,6 +1,4 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
@@ -23,7 +21,7 @@ class _UploadProductScreenState extends State<UploadProductScreen> {
   final _precioController = TextEditingController();
   final _cantidadController = TextEditingController(text: '0');
   String? _categoria;
-  XFile? _imageFile;
+  Uint8List? _imageBytes;
   final ImagePicker _picker = ImagePicker();
   List<Map<String, dynamic>> _categoriasDB = [];
   List<String> _camposDinamicosActuales = [];
@@ -48,6 +46,8 @@ class _UploadProductScreenState extends State<UploadProductScreen> {
 
   @override
   void dispose() {
+    _nombreController.removeListener(_rebuild);
+    _precioController.removeListener(_rebuild);
     _nombreController.dispose();
     _precioController.dispose();
     _cantidadController.dispose();
@@ -98,7 +98,8 @@ class _UploadProductScreenState extends State<UploadProductScreen> {
       imageQuality: 75, // Una calidad de 75 es ideal para visualizar productos
     );
     if (image != null) {
-      setState(() => _imageFile = image);
+      final bytes = await image.readAsBytes();
+      setState(() => _imageBytes = bytes);
     }
   }
 
@@ -111,10 +112,9 @@ class _UploadProductScreenState extends State<UploadProductScreen> {
       if (user == null) throw 'Debes estar autenticado';
 
       String? imageUrl;
-      if (_imageFile != null) {
-        final bytes = await _imageFile!.readAsBytes();
+      if (_imageBytes != null) {
         final fileName = '${user.id}_${DateTime.now().millisecondsSinceEpoch}.jpg';
-        imageUrl = await _service.subirImagen(bytes, fileName);
+        imageUrl = await _service.subirImagen(_imageBytes!, fileName);
       }
 
       // Si la gestión de inventario está activa, guardamos el stock en detalles
@@ -124,10 +124,21 @@ class _UploadProductScreenState extends State<UploadProductScreen> {
         // Opcional: Podrías definir que si stock es 0, activo sea false automáticamente
       }
 
+      final precioTexto = _precioController.text.replaceAll(RegExp(r'[^0-9]'), '');
+      final precioBase = double.tryParse(precioTexto) ?? 0.0;
+      if (precioBase <= 0) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Por favor ingresa un precio válido')),
+          );
+        }
+        return;
+      }
+
       await _service.crearProducto({
         'proveedor_id': user.id,
-        'nombre': _nombreController.text,
-        'precio_base': double.parse(_precioController.text.replaceAll('.', '')),
+        'nombre': _nombreController.text.trim(),
+        'precio_base': precioBase,
         'categoria': _categoria,
         'imagen_url': imageUrl,
         'detalles': finalDetalles, // Aquí va el mapa JSONB con el stock si aplica
@@ -179,16 +190,14 @@ class _UploadProductScreenState extends State<UploadProductScreen> {
                 decoration: BoxDecoration(
                   color: Colors.grey[200],
                   borderRadius: BorderRadius.circular(12),
-                  image: _imageFile != null
+                  image: _imageBytes != null
                       ? DecorationImage(
-                          image: kIsWeb 
-                              ? NetworkImage(_imageFile!.path) 
-                              : FileImage(File(_imageFile!.path)) as ImageProvider,
+                          image: MemoryImage(_imageBytes!),
                           fit: BoxFit.cover,
                         )
                       : null,
                 ),
-                child: _imageFile == null
+                child: _imageBytes == null
                     ? const Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
@@ -227,8 +236,14 @@ class _UploadProductScreenState extends State<UploadProductScreen> {
               onChanged: (val) => setState(() {
                 _categoria = val;
                 _detallesDinamicos.clear();
-                final catData = _categoriasDB.firstWhere((c) => c['nombre'] == val);
-                _camposDinamicosActuales = List<String>.from(catData['campos_dinamicos']);
+                final catData = _categoriasDB.firstWhere(
+                  (c) => c['nombre'] == val,
+                  orElse: () => <String, dynamic>{},
+                );
+                final campos = catData['campos_dinamicos'];
+                _camposDinamicosActuales = (campos is List)
+                    ? List<String>.from(campos.map((e) => e.toString()))
+                    : [];
               }),
             ),
             const SizedBox(height: 20),

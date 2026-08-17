@@ -23,17 +23,37 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   String _tipoEntrega = 'retiro'; // 'retiro', 'vendedor', 'courier'
   final TextEditingController _direccionController = TextEditingController();
   bool _isProcessing = false;
+  late Future<Map<String, dynamic>> _ratingFuture;
+  late Future<List<Map<String, dynamic>>> _reviewsFuture;
 
   // Acceso abreviado a los datos
   Map<String, dynamic> get productData => widget.productData;
 
   // Getters para facilitar el acceso a los datos anidados de Supabase
-  String get title => productData['nombre'] ?? 'Producto';
-  double get price => (productData['precio_base'] as num).toDouble();
-  String get region => productData['perfiles_proveedores']?['region'] ?? 'Ubicación no disponible';
-  String get sellerName => productData['perfiles_proveedores']?['nombre_comercial'] ?? 'Productor Anónimo';
-  String? get imageUrl => productData['imagen_url'];
-  int get maxStock => productData['detalles']?['stock'] ?? 999;
+  String get title => productData['nombre']?.toString() ?? 'Producto';
+  double get price {
+    final raw = productData['precio_base'];
+    if (raw is num) return raw.toDouble();
+    if (raw is String) return double.tryParse(raw.replaceAll(',', '.')) ?? 0.0;
+    return 0.0;
+  }
+  String get region => productData['perfiles_proveedores']?['region']?.toString() ?? 'Ubicación no disponible';
+  String get sellerName => productData['perfiles_proveedores']?['nombre_comercial']?.toString() ?? 'Productor Anónimo';
+  String? get imageUrl => productData['imagen_url']?.toString();
+  int get maxStock {
+    final stockRaw = productData['detalles']?['stock'];
+    if (stockRaw is int) return stockRaw;
+    if (stockRaw is String) return int.tryParse(stockRaw) ?? 999;
+    return 999;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    final prodId = productData['id']?.toString() ?? '';
+    _ratingFuture = _service.getAverageRating(prodId);
+    _reviewsFuture = _service.getProductReviews(prodId);
+  }
 
   @override
   void dispose() {
@@ -123,7 +143,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
         const Text('Reseñas', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
         const SizedBox(height: 10),
         FutureBuilder<Map<String, dynamic>>(
-          future: _service.getAverageRating(productData['id'].toString()),
+          future: _ratingFuture,
           builder: (context, snap) {
             final total = (snap.data?['total'] ?? 0) as int;
             final prom = ((snap.data?['promedio'] ?? 0.0) as num).toDouble();
@@ -140,7 +160,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
         ),
         const SizedBox(height: 8),
         FutureBuilder<List<Map<String, dynamic>>>(
-          future: _service.getProductReviews(productData['id'].toString()),
+          future: _reviewsFuture,
           builder: (context, snap) {
             if (snap.connectionState != ConnectionState.done) {
               return const Padding(
@@ -218,6 +238,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                     ? CachedNetworkImage(
                         imageUrl: imageUrl!,
                         fit: BoxFit.contain,
+                        memCacheWidth: 600,
+                        memCacheHeight: 600,
                         placeholder: (context, url) => const Center(
                           child: CircularProgressIndicator(strokeWidth: 2.5),
                         ),
@@ -556,82 +578,90 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   }
 
   void _mostrarModalTransferencia(BuildContext context) {
-    final config = productData['perfiles_proveedores']?['config_pago'] ?? {};
-
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(25))),
-      // StatefulBuilder: el bottom sheet vive en una ruta aparte y NO se
-      // reconstruye con el setState de la pantalla padre, por eso usamos un
-      // estado local 'procesando' manejado por el propio modal.
-      builder: (context) => StatefulBuilder(
-        builder: (context, setModalState) {
-          bool procesando = false;
-
-          Future<void> confirmar() async {
-            if (procesando) return; // 🔒 Guardia anti doble-clic
-
-            if (_tipoEntrega != 'retiro' && _direccionController.text.trim().isEmpty) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Por favor, ingresa una dirección de envío.')),
-              );
-              return;
-            }
-
-            setModalState(() => procesando = true);
-            try {
-              // Registramos el pedido para que el vendedor lo vea en su lista
-              await _service.crearPedido({
-                'producto_id': productData['id'],
-                'proveedor_id': productData['proveedor_id'],
-                'comprador_id': _service.usuarioActual?.id,
-                'comprador_nombre': _service.usuarioActual?.email ?? 'Cliente',
-                'monto': price * _cantidad,
-                'metodo_pago': 'transferencia',
-                'estado': 'pendiente_pago',
-                'cantidad': _cantidad,
-                'tipo_entrega': _tipoEntrega,
-                'direccion_entrega': _tipoEntrega != 'retiro' ? _direccionController.text.trim() : null,
-              });
-              if (!mounted) return;
-              _contactarVendedor(context, 'Ya realicé la transferencia.');
-            } finally {
-              if (mounted) setModalState(() => procesando = false);
-            }
+      builder: (context) => FutureBuilder<Map<String, dynamic>>(
+        future: _service.obtenerDatosTransferencia(productData['proveedor_id'].toString()),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Padding(
+              padding: EdgeInsets.all(40),
+              child: Center(child: CircularProgressIndicator(color: Color(0xFF2E7D32))),
+            );
           }
 
-          return Container(
-            padding: const EdgeInsets.all(30),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text('Transferencia Bancaria', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 20),
-                _buildCopiaField(context, 'Titular', config['titular'] ?? sellerName),
-                if (config['rut'] != null && config['rut'].isNotEmpty) _buildCopiaField(context, 'RUT', config['rut']),
-                if (config['banco'] != null && config['banco'].isNotEmpty) _buildCopiaField(context, 'Banco', config['banco']),
-                if (config['tipo_cuenta'] != null && config['tipo_cuenta'].isNotEmpty) _buildCopiaField(context, 'Tipo de Cuenta', config['tipo_cuenta']),
-                if (config['numero_cuenta'] != null && config['numero_cuenta'].isNotEmpty) _buildCopiaField(context, 'Número de Cuenta', config['numero_cuenta']),
-                // Compatibilidad con otros formatos (opcional)
-                if (config['alias'] != null && config['alias'].isNotEmpty) _buildCopiaField(context, 'Alias / Mensaje', config['alias']),
-                const SizedBox(height: 20),
-                ElevatedButton(
-                  onPressed: procesando ? null : confirmar,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green,
-                    disabledBackgroundColor: Colors.green.withValues(alpha: 0.6),
-                    minimumSize: const Size(double.infinity, 50),
-                  ),
-                  child: procesando
-                      ? const SizedBox(
-                          width: 22,
-                          height: 22,
-                          child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white),
-                        )
-                      : const Text('Enviar Comprobante por WhatsApp'),
-                )
-              ],
-            ),
+          final config = snapshot.data ?? {};
+
+          return StatefulBuilder(
+            builder: (context, setModalState) {
+              bool procesando = false;
+
+              Future<void> confirmar() async {
+                if (procesando) return; // 🔒 Guardia anti doble-clic
+
+                if (_tipoEntrega != 'retiro' && _direccionController.text.trim().isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Por favor, ingresa una dirección de envío.')),
+                  );
+                  return;
+                }
+
+                setModalState(() => procesando = true);
+                try {
+                  // Registramos el pedido para que el vendedor lo vea en su lista
+                  await _service.crearPedido({
+                    'producto_id': productData['id'],
+                    'proveedor_id': productData['proveedor_id'],
+                    'comprador_id': _service.usuarioActual?.id,
+                    'comprador_nombre': _service.usuarioActual?.email ?? 'Cliente',
+                    'monto': price * _cantidad,
+                    'metodo_pago': 'transferencia',
+                    'estado': 'pendiente_pago',
+                    'cantidad': _cantidad,
+                    'tipo_entrega': _tipoEntrega,
+                    'direccion_entrega': _tipoEntrega != 'retiro' ? _direccionController.text.trim() : null,
+                  });
+                  if (!context.mounted) return;
+                  _contactarVendedor(context, 'Ya realicé la transferencia.');
+                } finally {
+                  if (mounted) setModalState(() => procesando = false);
+                }
+              }
+
+              return SingleChildScrollView(
+                padding: const EdgeInsets.all(30),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text('Transferencia Bancaria', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 20),
+                    _buildCopiaField(context, 'Titular', config['titular']?.toString().isNotEmpty == true ? config['titular'].toString() : sellerName),
+                    if (config['rut'] != null && config['rut'].toString().isNotEmpty) _buildCopiaField(context, 'RUT', config['rut'].toString()),
+                    if (config['banco'] != null && config['banco'].toString().isNotEmpty) _buildCopiaField(context, 'Banco', config['banco'].toString()),
+                    if (config['tipo_cuenta'] != null && config['tipo_cuenta'].toString().isNotEmpty) _buildCopiaField(context, 'Tipo de Cuenta', config['tipo_cuenta'].toString()),
+                    if (config['numero_cuenta'] != null && config['numero_cuenta'].toString().isNotEmpty) _buildCopiaField(context, 'Número de Cuenta', config['numero_cuenta'].toString()),
+                    if (config['alias'] != null && config['alias'].toString().isNotEmpty) _buildCopiaField(context, 'Alias / Mensaje', config['alias'].toString()),
+                    const SizedBox(height: 20),
+                    ElevatedButton(
+                      onPressed: procesando ? null : confirmar,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green,
+                        disabledBackgroundColor: Colors.green.withValues(alpha: 0.6),
+                        minimumSize: const Size(double.infinity, 50),
+                      ),
+                      child: procesando
+                          ? const SizedBox(
+                              width: 22,
+                              height: 22,
+                              child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white),
+                            )
+                          : const Text('Enviar Comprobante por WhatsApp'),
+                    )
+                  ],
+                ),
+              );
+            },
           );
         },
       ),

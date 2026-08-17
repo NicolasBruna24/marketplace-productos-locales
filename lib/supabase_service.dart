@@ -17,14 +17,8 @@ class SupabaseService {
   Future<List<Map<String, dynamic>>> obtenerProductos({String? region}) async {
     var query = _supabase
         .from('productos')
-        .select('*, perfiles_proveedores!inner(nombre_comercial, whatsapp, region, metodo_pago)');
-
-    // Si NO hay usuario logueado (es un cliente), aplicamos filtros estrictos
-    if (usuarioActual == null) {
-      query = query
-          .eq('activo', true);
-    } else {
-    }
+        .select('*, perfiles_proveedores!inner(nombre_comercial, whatsapp, region, metodo_pago)')
+        .eq('activo', true);
 
     if (region != null && region.isNotEmpty) {
       query = query.ilike('perfiles_proveedores.region', '%$region%');
@@ -201,7 +195,12 @@ class SupabaseService {
         .from('favoritos')
         .select('productos(*, perfiles_proveedores(nombre_comercial, region))')
         .eq('usuario_id', user.id);
-    return List<Map<String, dynamic>>.from(res.map((e) => e['productos']));
+
+    return res
+        .map((e) => e['productos'])
+        .where((p) => p != null && p is Map<String, dynamic>)
+        .map((p) => Map<String, dynamic>.from(p as Map))
+        .toList();
   }
 
   Future<void> toggleFavorito(String productoId, bool esFavoritoActualmente) async {
@@ -356,6 +355,21 @@ class SupabaseService {
       }
     }
     return perfil;
+  }
+
+  // Obtener datos bancarios de transferencia de un proveedor (vía RPC segura)
+  Future<Map<String, dynamic>> obtenerDatosTransferencia(String proveedorId) async {
+    try {
+      final response = await _supabase.rpc('obtener_datos_transferencia', params: {
+        'p_proveedor_id': proveedorId,
+      });
+      if (response != null && response is Map) {
+        return Map<String, dynamic>.from(response);
+      }
+    } catch (e) {
+      debugPrint('Error al obtener datos de transferencia: $e');
+    }
+    return {};
   }
 
   // Guardar o actualizar perfil

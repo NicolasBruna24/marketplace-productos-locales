@@ -499,15 +499,6 @@ class _ProductListScreenState extends State<ProductListScreen> {
         _filteredProducts = products;
         _isLoading = false;
       });
-
-      // Registrar "Vistas" para analíticas (en segundo plano)
-      for (var p in products) {
-        _service
-            .registrarInteraccion(p['id'], p['proveedor_id'], 'vista')
-            .catchError((e) {
-              debugPrint('Error registrando vista: $e');
-            });
-      }
     } catch (e) {
       setState(() => _isLoading = false);
       if (mounted) {
@@ -709,7 +700,7 @@ class _ProductListScreenState extends State<ProductListScreen> {
                   );
                 } catch (e) {
                   // En caso de error mantenemos el diálogo abierto para reintentar
-                  if (mounted) {
+                  if (context.mounted) {
                     ScaffoldMessenger.of(
                       context,
                     ).showSnackBar(SnackBar(content: Text('Error: $e')));
@@ -1171,38 +1162,42 @@ class _ProductListScreenState extends State<ProductListScreen> {
           NavigationBar(
             selectedIndex: _currentTabIndex,
             onDestinationSelected: (index) {
+              if (index == 0) {
+                setState(() => _currentTabIndex = 0);
+                return;
+              }
+
               setState(() => _currentTabIndex = index);
+
               if (index == 1) {
                 // Favoritos
-                if (estaLogueado) {
-                  Navigator.push(
-                    context,
-                    slideRoute(const FavoritesScreen()),
-                  ).then((_) => _loadUserData());
-                } else {
-                  Navigator.push(context, slideRoute(const LoginScreen()));
-                }
-} else if (index == 2) {
-                // Mis Pedidos: tanto compradores como vendedores ven aquí sus
-                // pedidos. La pantalla muestra el botón "Calificar producto" solo
-                // al comprador de cada orden (comprador_id == auth.uid()). La
-                // configuración del perfil de vendedor sigue disponible en la
-                // pestaña "Perfil".
-                if (estaLogueado) {
-                  Navigator.push(context, slideRoute(const OrdersScreen()));
-                } else {
-                  Navigator.push(context, slideRoute(const LoginScreen()));
-                }
-              } else if (index == 3) {
-                // Perfil
-                if (estaLogueado) {
-                  Navigator.push(
-                    context,
-                    slideRoute(const EditProfileScreen()),
-                  ).then((_) => _loadUserData());
-                } else {
-                  Navigator.push(context, slideRoute(const LoginScreen()));
-                }
+                Navigator.push(
+                  context,
+                  slideRoute(
+                    estaLogueado
+                        ? const FavoritesScreen()
+                        : const LoginScreen(),
+                  ),
+                ).then((_) {
+                  if (mounted) {
+                    setState(() => _currentTabIndex = 0);
+                    _loadUserData();
+                  }
+                });
+              } else if (index == 2) {
+                // Mis Pedidos
+                Navigator.push(
+                  context,
+                  slideRoute(
+                    estaLogueado
+                        ? const OrdersScreen()
+                        : const LoginScreen(),
+                  ),
+                ).then((_) {
+                  if (mounted) {
+                    setState(() => _currentTabIndex = 0);
+                  }
+                });
               }
             },
             destinations: const [
@@ -1318,6 +1313,8 @@ class _ProductListScreenState extends State<ProductListScreen> {
                                 CachedNetworkImage(
                                   imageUrl: product['imagen_url'],
                                   fit: BoxFit.cover,
+                                  memCacheWidth: 400,
+                                  memCacheHeight: 400,
                                   placeholder: (context, url) =>
                                       Container(color: const Color(0xFFF5F5F5)),
                                   errorWidget: (context, url, error) =>

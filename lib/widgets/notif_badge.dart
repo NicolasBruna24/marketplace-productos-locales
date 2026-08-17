@@ -20,7 +20,8 @@ class _NotifBadgeState extends State<NotifBadge> {
   @override
   void initState() {
     super.initState();
-    _refresh();
+    _fetchCount();
+    _initRealtimeSubscription();
   }
 
   @override
@@ -30,26 +31,30 @@ class _NotifBadgeState extends State<NotifBadge> {
     super.dispose();
   }
 
-  Future<void> _refresh() async {
+  Future<void> _fetchCount() async {
     final count = await SupabaseService().getUnreadNotificationsCount();
     if (mounted) setState(() => _count = count);
+  }
 
+  void _initRealtimeSubscription() {
     final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) return;
+
     _channel?.unsubscribe();
     _channel = Supabase.instance.client
-        .channel('badge-${user?.id}')
+        .channel('badge-${user.id}')
         .onPostgresChanges(
           event: PostgresChangeEvent.all,
           schema: 'public',
           table: 'notificaciones',
-          filter: user == null
-              ? null
-              : PostgresChangeFilter(
-                  type: PostgresChangeFilterType.eq,
-                  column: 'usuario_id',
-                  value: user.id,
-                ),
-          callback: (_) => _refresh(),
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'usuario_id',
+            value: user.id,
+          ),
+          callback: (_) {
+            if (mounted) _fetchCount();
+          },
         )
         .subscribe();
   }
@@ -63,7 +68,7 @@ class _NotifBadgeState extends State<NotifBadge> {
         tooltip: 'Notificaciones',
         onPressed: () async {
           await Navigator.push(context, slideRoute(const NotificationsScreen()));
-          _refresh();
+          _fetchCount();
         },
         padding: EdgeInsets.zero,
         constraints: const BoxConstraints(),

@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cotizador_de_productos_locales/supabase_service.dart';
@@ -162,6 +162,8 @@ class _MyProductsScreenState extends State<MyProductsScreen> {
                                   ? CachedNetworkImage(
                                       imageUrl: p['imagen_url'],
                                       fit: BoxFit.cover,
+                                      memCacheWidth: 200,
+                                      memCacheHeight: 200,
                                       placeholder: (_, _) => Container(color: Colors.grey[200]),
                                       errorWidget: (_, _, _) => const Icon(Icons.image, color: Colors.grey),
                                     )

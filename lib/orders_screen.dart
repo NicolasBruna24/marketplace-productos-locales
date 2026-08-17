@@ -144,14 +144,16 @@ class _OrdersScreenState extends State<OrdersScreen> {
                   final String productName =
                       product?['nombre'] ?? 'Producto Desconocido';
                   final String imageUrl = product?['imagen_url'] ?? '';
-                  final double amount = (order['monto'] as num).toDouble();
-                  final String paymentMethod = order['metodo_pago'] ?? 'N/A';
-                  final String status = order['estado'] ?? 'desconocido';
+                  final double amount = (order['monto'] is num)
+                      ? (order['monto'] as num).toDouble()
+                      : (double.tryParse(order['monto']?.toString().replaceAll(',', '.') ?? '') ?? 0.0);
+                  final String paymentMethod = order['metodo_pago']?.toString() ?? 'N/A';
+                  final String status = order['estado']?.toString() ?? 'desconocido';
                   final String buyerName =
-                      order['comprador_nombre'] ?? 'Anónimo';
+                      order['comprador_nombre']?.toString() ?? 'Anónimo';
                   final String buyerWhatsapp =
-                      order['comprador_whatsapp'] ?? '';
-                  final String orderId = order['id'];
+                      order['comprador_whatsapp']?.toString() ?? '';
+                  final String orderId = order['id']?.toString() ?? '';
                   final String? productId = order['producto_id'];
                   final int quantity = order['cantidad'] ?? 1;
                   final String deliveryType = order['tipo_entrega'] ?? 'retiro';
@@ -193,6 +195,8 @@ class _OrdersScreenState extends State<OrdersScreen> {
                                   width: 60,
                                   height: 60,
                                   fit: BoxFit.cover,
+                                  memCacheWidth: 200,
+                                  memCacheHeight: 200,
                                   placeholder: (context, url) =>
                                       Container(color: Colors.grey[200]),
                                   errorWidget: (context, url, error) =>
