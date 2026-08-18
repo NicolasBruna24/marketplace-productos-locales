@@ -41,6 +41,17 @@ class SupabaseService {
     debugPrint('SupabaseService: Interacción registrada con éxito.');
   }
 
+  // Obtener interacciones del proveedor actual para las estadísticas del Dashboard
+  Future<List<Map<String, dynamic>>> obtenerEstadisticas() async {
+    final user = usuarioActual;
+    if (user == null) return [];
+    final response = await _supabase
+        .from('interacciones')
+        .select('tipo_evento, created_at')
+        .eq('proveedor_id', user.id);
+    return List<Map<String, dynamic>>.from(response);
+  }
+
   // --- Autenticación ---
 
   // Registrar un nuevo proveedor
