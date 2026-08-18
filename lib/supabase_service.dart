@@ -287,18 +287,6 @@ class SupabaseService {
   // Stream para escuchar cambios en la sesión (útil para la UI)
   Stream<AuthState> get onAuthStateChange => _supabase.auth.onAuthStateChange;
 
-  // Obtener estadísticas de clics por producto para el dashboard básico
-  Future<List<Map<String, dynamic>>> obtenerEstadisticas() async {
-    final user = usuarioActual;
-    if (user == null) return [];
-
-    final response = await _supabase
-        .from('interacciones')
-        .select('tipo_evento, created_at, productos(nombre)')
-        .eq('proveedor_id', user.id);
-    return List<Map<String, dynamic>>.from(response);
-  }
-
   // Obtener resumen estadístico para el Dashboard Premium
   Future<Map<String, Map<String, int>>> obtenerResumenEstadistico() async {
     final user = usuarioActual;
@@ -430,13 +418,6 @@ class SupabaseService {
     }
   }
 
-  // Método unificado para pagos con tarjeta en Chile (vía Mercado Pago)
-  Future<String> obtenerLinkWebpay(String pedidoId, double precio) async {
-    // Como Mercado Pago ya incluye Webpay/Redcompra en Chile, 
-    // redirigimos esta llamada al mismo flujo para simplificar.
-    return obtenerLinkMercadoPago(pedidoId, "Pedido ProdLocales", precio);
-  }
-
   // Crear la preferencia de pago en Mercado Pago llamando a la Edge Function
   // 'procesar-pago-mp' (ya desplegada en Supabase). Devuelve el init_point
   // (link de pago) que la función genera.
@@ -503,25 +484,6 @@ class SupabaseService {
     await _supabase.storage.from('comprobantes').uploadBinary(fileName, bytes, 
         fileOptions: const FileOptions(contentType: 'image/jpeg', upsert: true));
     return _supabase.storage.from('comprobantes').getPublicUrl(fileName);
-  }
-
-  // --- Funciones Administrativas (Para ti) ---
-
-  // Ver productos que están esperando aprobación
-  Future<List<Map<String, dynamic>>> obtenerProductosPendientes() async {
-    final response = await _supabase
-        .from('productos')
-        .select('*, perfiles_proveedores(nombre_comercial)')
-        .eq('estado', 'pendiente');
-    return List<Map<String, dynamic>>.from(response);
-  }
-
-  // Aprobar o rechazar un producto manualmente
-  Future<void> cambiarEstadoProducto(String productoId, String nuevoEstado) async {
-    await _supabase
-        .from('productos')
-        .update({'estado': nuevoEstado})
-        .eq('id', productoId);
   }
 
   // Obtener los productos del proveedor actual (pantalla "Mis Productos")
